@@ -1,23 +1,23 @@
 # Teachers B00k — The Gradebook That Doesn't Suck
 
-A browser-based teacher gradebook that outperforms Teacher Aide Cloud, iDoceo, Additio, and PowerSchool.
+A browser-based teacher gradebook that makes entering and managing grades effortless.
 
-## Competitive Differentiation
+## Key Features
 
-| Feature | Teacher Aide | Additio | iDoceo | PowerSchool | **Ours** |
-|---------|-------------|---------|--------|------------|----------|
-| Browser-based | ❌ | ✅ | ❌ iPad | ✅ Legacy | ✅ Modern |
-| Auto-advance grade entry | ❌ | ❌ | ❌ | ❌ | ✅ |
-| Batch score entry | ❌ | ❌ | ❌ | ❌ | ✅ |
-| Voice grade entry | ❌ | ❌ | ❌ | ❌ | ✅ |
-| AI comment generation | ❌ | ❌ | ❌ | ❌ | ✅ |
-| Built-in rubric grading | ❌ Separate app | ✅ | ✅ | ❌ | ✅ |
-| Assignment analytics/histogram | ❌ | ❌ | ❌ | ❌ | ✅ |
-| Continuous scroll entry | ❌ Grid only | ❌ | ❌ | ❌ | ✅ |
-| At-risk prediction | ✅ Basic | ❌ | ❌ | ❌ | ✅ AI-powered |
-| Grade scanning (photo) | ❌ | ❌ | ❌ | ❌ | ✅ |
-| Multi-device sync | ✅ | ✅ | ❌ | ✅ | ✅ |
-| Free tier | 30d trial | ❌ | 60d trial | N/A | ✅ Yes |
+| Feature | **Teachers B00k** |
+|---------|------------------|
+| Browser-based | ✅ Modern web app |
+| Auto-advance grade entry | ✅ |
+| Batch score entry | ✅ |
+| Voice grade entry | ✅ |
+| AI comment generation | ✅ |
+| Built-in rubric grading | ✅ |
+| Assignment analytics/histogram | ✅ |
+| Continuous scroll entry | ✅ |
+| At-risk prediction | ✅ AI-powered |
+| Grade scanning (photo) | ✅ |
+| Multi-device sync | ✅ |
+| Free tier | ✅ Yes |
 
 ## Stack
 - **Backend:** Python FastAPI + SQLite (swappable to Postgres)
