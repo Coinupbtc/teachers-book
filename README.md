@@ -35,3 +35,20 @@ source venv/bin/activate
 pip install -r requirements.txt
 uvicorn main:app --reload
 ```
+
+## Security (required for any non-local deploy)
+
+| Variable | Purpose |
+|---|---|
+| `SECRET_KEY` | JWT signing key — **set a long random value** |
+| `TEACHERS_BOOK_ENV` | Use `production` to refuse the placeholder secret and open CORS |
+| `CORS_ORIGINS` | Comma-separated allowed origins (not `*` in production) |
+| `TEACHERS_BOOK_INVITE_CODE` | Optional; when set, registration requires this code |
+
+Local defaults are fine for single-machine use. For production:
+
+```bash
+export TEACHERS_BOOK_ENV=production
+export SECRET_KEY="$(openssl rand -hex 32)"
+export CORS_ORIGINS="https://your-domain.example"
+```
