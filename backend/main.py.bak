@@ -1,0 +1,627 @@
+"""
+GradeBook Pro — Main Application
+FastAPI backend with all gradebook routes.
+"""
+
+import os
+import json
+from datetime import date, datetime
+from typing import Optional, List
+from fastapi import FastAPI, Depends, HTTPException, status, Form, UploadFile, File
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
+from models import (
+    init_db, get_db, SessionLocal,
+    Teacher, Class, Student, Category, Assignment, Grade,
+    Rubric, RubricScore, Attendance, GradeComputer
+)
+
+app = FastAPI(title="GradeBook Pro", version="1.0.0")
+
+# CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+security = HTTPBasic()
+
+
+# ─── Auth helpers ────────────────────────────────────────────────────────────
+
+def get_current_teacher(db: Session = Depends(get_db)):
+    """Simple session-based auth via teacher_id stored in query params.
+    For production, use proper JWT. For MVP we use email-based lookup."""
+    return None  # Will be overridden by session middleware
+
+# We'll use a simpler approach: teacher_id in cookie/session
+# For MVP, pass ?teacher_id=X in URL or set it once
+_active_teacher = {"id": None}
+
+
+def require_teacher(db: Session = Depends(get_db)) -> Teacher:
+    """Get the active teacher or raise 401."""
+    tid = _active_teacher["id"]
+    if tid is None:
+        raise HTTPException(status_code=401, detail="Not logged in")
+    teacher = db.query(Teacher).filter(Teacher.id == tid).first()
+    if not teacher:
+        raise HTTPException(status_code=404, detail="Teacher not found")
+    return teacher
+
+
+# ─── API Routes ──────────────────────────────────────────────────────────────
+
+@app.on_event("startup")
+def on_startup():
+    init_db()
+
+
+# ─── Auth Routes ─────────────────────────────────────────────────────────────
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+class SignupRequest(BaseModel):
+    email: str
+    name: str
+    password: str
+
+
+@app.post("/api/login")
+def login(req: LoginRequest, db: Session = Depends(get_db)):
+    teacher = db.query(Teacher).filter(Teacher.email == req.email).first()
+    if not teacher or not teacher.verify_password(req.password):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    _active_teacher["id"] = teacher.id
+    return {"status": "ok", "teacher_id": teacher.id, "name": teacher.name}
+
+
+@app.post("/api/signup")
+def signup(req: SignupRequest, db: Session = Depends(get_db)):
+    existing = db.query(Teacher).filter(Teacher.email == req.email).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    teacher = Teacher(email=req.email, name=req.name)
+    teacher.set_password(req.password)
+    db.add(teacher)
+    db.commit()
+    db.refresh(teacher)
+    _active_teacher["id"] = teacher.id
+    return {"status": "ok", "teacher_id": teacher.id}
+
+
+@app.get("/api/me")
+def get_me(teacher: Teacher = Depends(require_teacher)):
+    return {"id": teacher.id, "email": teacher.email, "name": teacher.name}
+
+
+@app.post("/api/logout")
+def logout():
+    _active_teacher["id"] = None
+    return {"status": "ok"}
+
+
+# ─── Class Routes ────────────────────────────────────────────────────────────
+
+class ClassCreate(BaseModel):
+    name: str
+    subject: str = ""
+    grade_level: str = ""
+    semester: str = "Fall 2026"
+    school_year: str = "2026-2027"
+
+
+@app.get("/api/classes")
+def list_classes(teacher: Teacher = Depends(require_teacher), db: Session = Depends(get_db)):
+    classes = db.query(Class).filter(Class.teacher_id == teacher.id).order_by(Class.created_at.desc()).all()
+    result = []
+    for c in classes:
+        student_count = db.query(Student).filter(Student.class_id == c.id).count()
+        assignment_count = db.query(Assignment).filter(Assignment.class_id == c.id).count()
+        result.append({
+            "id": c.id,
+            "name": c.name,
+            "subject": c.subject,
+            "semester": c.semester,
+            "student_count": student_count,
+            "assignment_count": assignment_count,
+        })
+    return result
+
+
+@app.post("/api/classes")
+def create_class(req: ClassCreate, teacher: Teacher = Depends(require_teacher), db: Session = Depends(get_db)):
+    cls = Class(
+        teacher_id=teacher.id,
+        name=req.name,
+        subject=req.subject,
+        grade_level=req.grade_level,
+        semester=req.semester,
+        school_year=req.school_year,
+    )
+    db.add(cls)
+    db.commit()
+    db.refresh(cls)
+
+    # Create default categories
+    defaults = [
+        ("Tests", 0.35, 0),
+        ("Quizzes", 0.20, 1),
+        ("Homework", 0.20, 2),
+        ("Classwork", 0.15, 3),
+        ("Participation", 0.10, 4),
+    ]
+    for name, weight, order in defaults:
+        cat = Category(class_id=cls.id, name=name, weight=weight, sort_order=order)
+        db.add(cat)
+    db.commit()
+
+    return {"id": cls.id, "name": cls.name}
+
+
+# ─── Student Routes ──────────────────────────────────────────────────────────
+
+class StudentCreate(BaseModel):
+    first_name: str
+    last_name: str
+    email: str = ""
+    student_id: str = ""
+
+
+@app.get("/api/classes/{class_id}/students")
+def list_students(class_id: int, teacher: Teacher = Depends(require_teacher), db: Session = Depends(get_db)):
+    cls = db.query(Class).filter(Class.id == class_id, Class.teacher_id == teacher.id).first()
+    if not cls:
+        raise HTTPException(status_code=404, detail="Class not found")
+
+    students = db.query(Student).filter(Student.class_id == class_id).order_by(Student.last_name, Student.first_name).all()
+    return [
+        {
+            "id": s.id,
+            "first_name": s.first_name,
+            "last_name": s.last_name,
+            "display_name": s.display_name,
+            "email": s.email,
+            "student_id": s.student_id,
+            "notes": s.notes,
+        }
+        for s in students
+    ]
+
+
+@app.post("/api/classes/{class_id}/students")
+def add_student(class_id: int, req: StudentCreate, teacher: Teacher = Depends(require_teacher), db: Session = Depends(get_db)):
+    cls = db.query(Class).filter(Class.id == class_id, Class.teacher_id == teacher.id).first()
+    if not cls:
+        raise HTTPException(status_code=404, detail="Class not found")
+    student = Student(class_id=class_id, **req.dict())
+    db.add(student)
+    db.commit()
+    db.refresh(student)
+    return {"id": student.id, "display_name": student.display_name}
+
+
+@app.post("/api/classes/{class_id}/students/batch")
+def batch_add_students(
+    class_id: int,
+    students_json: str = Form(...),
+    teacher: Teacher = Depends(require_teacher),
+    db: Session = Depends(get_db)
+):
+    """Add multiple students at once. JSON array of {first_name, last_name, email?, student_id?}"""
+    cls = db.query(Class).filter(Class.id == class_id, Class.teacher_id == teacher.id).first()
+    if not cls:
+        raise HTTPException(status_code=404, detail="Class not found")
+
+    data = json.loads(students_json)
+    added = []
+    for row in data:
+        s = Student(class_id=class_id, first_name=row["first_name"], last_name=row["last_name"])
+        db.add(s)
+        added.append(s.display_name)
+    db.commit()
+    return {"status": "ok", "added": len(added), "names": added}
+
+
+from fastapi.responses import PlainTextResponse
+
+@app.delete("/api/students/{student_id}")
+def remove_student(student_id: int, teacher: Teacher = Depends(require_teacher), db: Session = Depends(get_db)):
+    student = db.query(Student).filter(Student.id == student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+    # Verify ownership through class
+    cls = db.query(Class).filter(Class.id == student.class_id, Class.teacher_id == teacher.id).first()
+    if not cls:
+        raise HTTPException(status_code=403, detail="Not your class")
+    db.delete(student)
+    db.commit()
+    return {"status": "deleted"}
+
+
+# ─── Category Routes ─────────────────────────────────────────────────────────
+
+@app.get("/api/classes/{class_id}/categories")
+def list_categories(class_id: int, teacher: Teacher = Depends(require_teacher), db: Session = Depends(get_db)):
+    cats = db.query(Category).filter(Category.class_id == class_id).order_by(Category.sort_order).all()
+    # Compute actual weight percentages
+    total_weight = sum(c.weight for c in cats)
+    return [
+        {
+            "id": c.id,
+            "name": c.name,
+            "weight": c.weight,
+            "weight_pct": round(c.weight / total_weight * 100, 1) if total_weight > 0 else 0,
+            "drop_lowest": c.drop_lowest,
+            "sort_order": c.sort_order,
+            "assignment_count": db.query(Assignment).filter(Assignment.category_id == c.id).count(),
+        }
+        for c in cats
+    ]
+
+
+class CategoryUpdate(BaseModel):
+    name: str
+    weight: float = 1.0
+    drop_lowest: int = 0
+
+
+@app.put("/api/categories/{category_id}")
+def update_category(category_id: int, req: CategoryUpdate, teacher: Teacher = Depends(require_teacher), db: Session = Depends(get_db)):
+    cat = db.query(Category).filter(Category.id == category_id).first()
+    if not cat:
+        raise HTTPException(status_code=404, detail="Category not found")
+    cat.name = req.name
+    cat.weight = req.weight
+    cat.drop_lowest = req.drop_lowest
+    db.commit()
+    return {"status": "updated"}
+
+
+# ─── Assignment Routes ───────────────────────────────────────────────────────
+
+class AssignmentCreate(BaseModel):
+    name: str
+    max_score: float = 100.0
+    category_id: Optional[int] = None
+    due_date: Optional[str] = None
+    description: str = ""
+    extra_credit: bool = False
+
+
+@app.get("/api/classes/{class_id}/assignments")
+def list_assignments(class_id: int, teacher: Teacher = Depends(require_teacher), db: Session = Depends(get_db)):
+    assignments = db.query(Assignment).filter(Assignment.class_id == class_id).order_by(Assignment.due_date.desc().nullslast(), Assignment.created_at.desc()).all()
+    return [
+        {
+            "id": a.id,
+            "name": a.name,
+            "max_score": a.max_score,
+            "category_id": a.category_id,
+            "due_date": str(a.due_date) if a.due_date else None,
+            "extra_credit": a.extra_credit,
+            "assignment_type": a.assignment_type,
+            "graded_count": db.query(Grade).filter(Grade.assignment_id == a.id).count(),
+        }
+        for a in assignments
+    ]
+
+
+@app.post("/api/classes/{class_id}/assignments")
+def create_assignment(class_id: int, req: AssignmentCreate, teacher: Teacher = Depends(require_teacher), db: Session = Depends(get_db)):
+    cls = db.query(Class).filter(Class.id == class_id, Class.teacher_id == teacher.id).first()
+    if not cls:
+        raise HTTPException(status_code=404, detail="Class not found")
+
+    due = None
+    if req.due_date:
+        try:
+            due = date.fromisoformat(req.due_date)
+        except ValueError:
+            pass
+
+    assignment = Assignment(
+        class_id=class_id,
+        name=req.name,
+        max_score=req.max_score,
+        category_id=req.category_id,
+        due_date=due,
+        description=req.description,
+        extra_credit=req.extra_credit,
+    )
+    db.add(assignment)
+    db.commit()
+    db.refresh(assignment)
+
+    # Auto-create empty grade entries for all students
+    students = db.query(Student).filter(Student.class_id == class_id).all()
+    for s in students:
+        grade = Grade(student_id=s.id, assignment_id=assignment.id, score=0.0)
+        db.add(grade)
+    db.commit()
+
+    return {"id": assignment.id, "name": assignment.name}
+
+
+# ─── Grade Entry Routes ──────────────────────────────────────────────────────
+
+class GradeUpdate(BaseModel):
+    score: float
+    max_score: Optional[float] = None
+    is_excused: bool = False
+    late: bool = False
+    comments: str = ""
+
+
+@app.get("/api/assignments/{assignment_id}/grades")
+def get_grades(assignment_id: int, teacher: Teacher = Depends(require_teacher), db: Session = Depends(get_db)):
+    assignment = db.query(Assignment).filter(Assignment.id == assignment_id).first()
+    if not assignment:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+
+    grades = (
+        db.query(Grade, Student)
+        .join(Student, Grade.student_id == Student.id)
+        .filter(Grade.assignment_id == assignment_id)
+        .order_by(Student.last_name, Student.first_name)
+        .all()
+    )
+
+    computer = GradeComputer(db)
+    stats = computer.assignment_stats(assignment_id)
+
+    return {
+        "assignment": {
+            "id": assignment.id,
+            "name": assignment.name,
+            "max_score": assignment.max_score,
+            "category_id": assignment.category_id,
+        },
+        "stats": stats,
+        "grades": [
+            {
+                "grade_id": g.id,
+                "student_id": s.id,
+                "student_name": s.display_name,
+                "score": g.score,
+                "max_score": g.max_score,
+                "is_excused": g.is_excused,
+                "late": g.late,
+                "comments": g.comments,
+                "percentage": round(g.score / (g.max_score or assignment.max_score) * 100, 1)
+                              if (g.max_score or assignment.max_score) > 0 else 0,
+            }
+            for g, s in grades
+        ],
+    }
+
+
+@app.put("/api/grades/{grade_id}")
+def update_grade(grade_id: int, req: GradeUpdate, teacher: Teacher = Depends(require_teacher), db: Session = Depends(get_db)):
+    grade = db.query(Grade).filter(Grade.id == grade_id).first()
+    if not grade:
+        raise HTTPException(status_code=404, detail="Grade not found")
+    grade.score = req.score
+    if req.max_score is not None:
+        grade.max_score = req.max_score
+    grade.is_excused = req.is_excused
+    grade.late = req.late
+    grade.comments = req.comments
+    grade.graded_at = datetime.utcnow()
+    db.commit()
+    return {"status": "updated"}
+
+
+@app.post("/api/assignments/{assignment_id}/grades/batch")
+def batch_update_grades(assignment_id: int, grades_json: str = Form(...), db: Session = Depends(get_db)):
+    """Batch update grades. JSON array of {grade_id, score, late?, is_excused?, comments?}"""
+    data = json.loads(grades_json)
+    updated = 0
+    for entry in data:
+        grade = db.query(Grade).filter(Grade.id == entry["grade_id"]).first()
+        if grade:
+            grade.score = entry.get("score", grade.score)
+            grade.late = entry.get("late", grade.late)
+            grade.is_excused = entry.get("is_excused", grade.is_excused)
+            if "max_score" in entry:
+                grade.max_score = entry["max_score"]
+            grade.graded_at = datetime.utcnow()
+            updated += 1
+    db.commit()
+    return {"status": "ok", "updated": updated}
+
+
+# ─── Student Average / Gradebook View ────────────────────────────────────────
+
+@app.get("/api/classes/{class_id}/gradebook")
+def gradebook_view(class_id: int, teacher: Teacher = Depends(require_teacher), db: Session = Depends(get_db)):
+    """Full gradebook view: students x assignments grid with averages."""
+    cls = db.query(Class).filter(Class.id == class_id, Class.teacher_id == teacher.id).first()
+    if not cls:
+        raise HTTPException(status_code=404, detail="Class not found")
+
+    students = db.query(Student).filter(Student.class_id == class_id).order_by(Student.last_name, Student.first_name).all()
+    assignments = db.query(Assignment).filter(Assignment.class_id == class_id).order_by(Assignment.due_date, Assignment.name).all()
+
+    computer = GradeComputer(db)
+    categories = db.query(Category).filter(Category.class_id == class_id).order_by(Category.sort_order).all()
+
+    # Build grade matrix
+    rows = []
+    for s in students:
+        student_data = {
+            "student_id": s.id,
+            "name": s.display_name,
+            "grades": {},
+        }
+
+        for a in assignments:
+            grade = db.query(Grade).filter(
+                Grade.student_id == s.id,
+                Grade.assignment_id == a.id,
+            ).first()
+            if grade:
+                student_data["grades"][a.id] = {
+                    "grade_id": grade.id,
+                    "score": grade.score,
+                    "max_score": grade.max_score or a.max_score,
+                    "is_excused": grade.is_excused,
+                    "late": grade.late,
+                    "percentage": round(grade.score / (grade.max_score or a.max_score) * 100, 1)
+                                  if (grade.max_score or a.max_score) > 0 else 0,
+                }
+
+        # Calculate running average
+        avg_data = computer.student_average(s.id, class_id)
+        student_data["average"] = avg_data["average"]
+        student_data["letter"] = avg_data["letter"]
+        rows.append(student_data)
+
+    # Class summary
+    class_stats = computer.class_overview(class_id)
+
+    return {
+        "class": {
+            "id": cls.id,
+            "name": cls.name,
+            "subject": cls.subject,
+        },
+        "categories": [
+            {"id": c.id, "name": c.name, "weight": c.weight} for c in categories
+        ],
+        "assignments": [
+            {
+                "id": a.id,
+                "name": a.name,
+                "max_score": a.max_score,
+                "category_id": a.category_id,
+                "due_date": str(a.due_date) if a.due_date else None,
+                "extra_credit": a.extra_credit,
+            }
+            for a in assignments
+        ],
+        "students": rows,
+        "stats": class_stats,
+    }
+
+
+# ─── Analytics Routes ────────────────────────────────────────────────────────
+
+@app.get("/api/classes/{class_id}/analytics")
+def class_analytics(class_id: int, teacher: Teacher = Depends(require_teacher), db: Session = Depends(get_db)):
+    computer = GradeComputer(db)
+    stats = computer.class_overview(class_id)
+    assignments = db.query(Assignment).filter(Assignment.class_id == class_id).all()
+
+    assignment_stats = []
+    for a in assignments:
+        s = computer.assignment_stats(a.id)
+        assignment_stats.append({
+            "id": a.id,
+            "name": a.name,
+            "stats": s,
+        })
+
+    return {
+        "overview": stats,
+        "assignments": assignment_stats,
+    }
+
+
+# ─── Report Card / Exports ───────────────────────────────────────────────────
+
+@app.get("/api/classes/{class_id}/reports")
+def class_reports(class_id: int, teacher: Teacher = Depends(require_teacher), db: Session = Depends(get_db)):
+    """Generate report card data for all students."""
+    cls = db.query(Class).filter(Class.id == class_id, Class.teacher_id == teacher.id).first()
+    if not cls:
+        raise HTTPException(status_code=404, detail="Class not found")
+
+    computer = GradeComputer(db)
+    students = db.query(Student).filter(Student.class_id == class_id).order_by(Student.last_name, Student.first_name).all()
+
+    reports = []
+    for s in students:
+        avg_data = computer.student_average(s.id, class_id)
+        # Get recent grades
+        recent_grades = (
+            db.query(Grade, Assignment)
+            .join(Assignment, Grade.assignment_id == Assignment.id)
+            .filter(Grade.student_id == s.id)
+            .order_by(Assignment.due_date.desc().nullslast())
+            .limit(10)
+            .all()
+        )
+
+        reports.append({
+            "student_id": s.id,
+            "name": s.display_name,
+            "average": avg_data["average"],
+            "letter": avg_data["letter"],
+            "by_category": avg_data.get("by_category", {}),
+            "recent_assignments": [
+                {
+                    "name": a.name,
+                    "score": g.score,
+                    "max": g.max_score or a.max_score,
+                    "percentage": round(g.score / (g.max_score or a.max_score) * 100, 1),
+                }
+                for g, a in recent_grades
+            ],
+        })
+
+    return {
+        "class_name": cls.name,
+        "student_count": len(reports),
+        "reports": reports,
+    }
+
+
+@app.get("/api/classes/{class_id}/export/csv")
+def export_csv(class_id: int, teacher: Teacher = Depends(require_teacher), db: Session = Depends(get_db)):
+    """Export gradebook as CSV."""
+    data = gradebook_view(class_id, teacher, db)
+
+    lines = []
+    # Header
+    header = ["Student Name", "Average", "Letter Grade"]
+    for a in data["assignments"]:
+        header.append(f"{a['name']} ({a['max_score']}pts)")
+    lines.append(",".join(f'"{h}"' for h in header))
+
+    # Rows
+    for s in data["students"]:
+        row = [s["name"], str(s["average"]), s["letter"]]
+        for a in data["assignments"]:
+            grade = s["grades"].get(str(a["id"])) or s["grades"].get(a["id"])
+            if grade:
+                row.append(str(grade["score"]))
+            else:
+                row.append("")
+        lines.append(",".join(row))
+
+    return PlainTextResponse(
+        "\n".join(lines),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={data['class']['name']}_gradebook.csv"},
+    )
+
+
+# ─── Serve Frontend ──────────────────────────────────────────────────────────
+
+# Serve the SPA frontend
+from fastapi.staticfiles import StaticFiles
+from pathlib import Path
+
+frontend_dir = Path(__file__).parent.parent / "frontend"
+if frontend_dir.exists():
+    app.mount("/", StaticFiles(directory=str(frontend_dir), html=True), name="frontend")
