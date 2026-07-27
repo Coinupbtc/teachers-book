@@ -1,6 +1,6 @@
-# Teachers B00k — The Gradebook That Doesn't Suck
+# Teachers B00k
 
-Browser-based teacher gradebook: fast entry, batch scores, voice, rubrics, analytics.
+Browser-based teacher gradebook: fast entry, batch scores, voice, rubrics, and analytics.
 
 ## At a glance
 
