@@ -1,5 +1,7 @@
 # Teachers Book
 
+![CI](https://github.com/Coinupbtc/teachers-book/actions/workflows/ci.yml/badge.svg)
+
 Browser-based teacher gradebook: fast entry, batch scores, voice, rubrics, and analytics.
 
 ## At a glance
