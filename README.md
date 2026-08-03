@@ -1,4 +1,4 @@
-# Teachers B00k
+# Teachers Book
 
 Browser-based teacher gradebook: fast entry, batch scores, voice, rubrics, and analytics.
 
@@ -6,7 +6,7 @@ Browser-based teacher gradebook: fast entry, batch scores, voice, rubrics, and a
 
 | | |
 |---|---|
-| **What it is** | **Teachers B00k** — a browser-based teacher gradebook (FastAPI + SQLite) with fast entry, batch/voice, rubrics, and analytics. |
+| **What it is** | **Teachers Book** — a browser-based teacher gradebook (FastAPI + SQLite) with fast entry, batch/voice, rubrics, and analytics. |
 | **What it’s for** | Enter and manage grades quickly on a single machine (or your own deploy) without a heavyweight SIS — local-first by default. |
 | **How to use it** | `./setup.sh` → **http://127.0.0.1:8010/**. For any shared/production host, set `SECRET_KEY` + `TEACHERS_BOOK_ENV=production` (see Security below). |
 

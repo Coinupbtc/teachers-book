@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# One-command local setup + run for Teachers B00k
+# One-command local setup + run for Teachers Book
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT/backend"
 
-echo "==> Teachers B00k setup"
+echo "==> Teachers Book setup"
 python3 -m venv venv
 ./venv/bin/pip -q install -U pip
 ./venv/bin/pip -q install -r requirements.txt
