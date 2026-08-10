@@ -1,5 +1,21 @@
 # Teachers B00k — The Gradebook That Doesn't Suck
 
+## At a glance
+
+| | |
+|---|---|
+| **What it is** | Browser teacher gradebook (Teachers B00k). |
+| **What it’s for** | Fast local-first grade entry and analytics. |
+| **How to use it** | ./setup.sh → http://127.0.0.1:8010/ |
+
+## Try it
+
+### One command
+```bash
+git clone https://github.com/Coinupbtc/teachers-book.git
+cd teachers-book && ./setup.sh
+```
+
 A browser-based teacher gradebook that makes entering and managing grades effortless.
 
 ## Key Features

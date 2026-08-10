@@ -39,3 +39,7 @@ Thumbs.db
 # Test databases
 test_*.db
 gradebook.db
+.env.*
+!.env.example
+node_modules/
+*.pyc
