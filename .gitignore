@@ -43,3 +43,4 @@ gradebook.db
 !.env.example
 node_modules/
 *.pyc
+dogfood-output/
