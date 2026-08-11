@@ -94,3 +94,16 @@ html[data-theme="dark"] .benchmark-row:hover { background:#1d3028; }
 .account-pick:hover { border-color:var(--forest); background:var(--soft); }
 .account-empty { color:var(--muted); font-size:.9rem; margin:8px 0 16px; }
 html[data-theme="dark"] .account-pick:hover { background:#1d3028; border-color:#4d7764; }
+
+/* Backup & restore (login + modal) — touch-friendly, one column */
+.login-backup { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line); display: grid; gap: 12px; }
+.backup-panel { display: grid; gap: 14px; }
+.backup-panel p { color: var(--muted); font-size: .95rem; }
+.backup-panel strong { color: var(--ink); }
+.backup-rule { border: 0; border-top: 1px solid var(--line); margin: 4px 0; }
+.backup-file-label { display: grid; place-items: center; min-height: 48px; text-align: center; cursor: pointer; }
+.backup-file-label input { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
+#backup-status { min-height: 1.2em; }
+@media (max-width: 430px) {
+  .account .text-button { min-height: 44px; min-width: 44px; padding: 8px 10px; }
+}

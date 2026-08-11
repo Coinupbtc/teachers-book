@@ -7,6 +7,22 @@
 
   const DB_NAME = "teachers_b00k";
   const DB_VERSION = 1;
+  /** Object-store names — keep in sync with onupgradeneeded + backup format. */
+  const STORE_NAMES = [
+    "meta",
+    "accounts",
+    "classes",
+    "categories",
+    "students",
+    "assignments",
+    "grades",
+    "rewards",
+    "goals",
+    "benchmarks",
+  ];
+  /** Bumped when backup JSON shape changes (restore rejects unknown formats). */
+  const BACKUP_FORMAT = "teachers-b00k-backup";
+  const BACKUP_VERSION = 1;
   // Backend default category weights (fractions). UI shows weight_pct.
   const DEFAULT_CATEGORIES = [
     { name: "Tests", weight: 0.35, sort_order: 0 },
@@ -25,19 +41,7 @@
       req.onerror = () => reject(req.error || new Error("IndexedDB open failed"));
       req.onupgradeneeded = () => {
         const db = req.result;
-        const stores = [
-          "meta",
-          "accounts",
-          "classes",
-          "categories",
-          "students",
-          "assignments",
-          "grades",
-          "rewards",
-          "goals",
-          "benchmarks",
-        ];
-        for (const name of stores) {
+        for (const name of STORE_NAMES) {
           if (!db.objectStoreNames.contains(name)) {
             const store = db.createObjectStore(name, { keyPath: "id", autoIncrement: true });
             if (name === "classes") store.createIndex("account_id", "account_id", { unique: false });
@@ -746,6 +750,80 @@
     return { status: "deleted" };
   }
 
+  // ── Device backup / restore (flash-drive friendly JSON) ───────────────────
+
+  /**
+   * Snapshot every IndexedDB store. IDs are preserved so foreign keys stay valid
+   * when the file is restored on this or another Chrome profile.
+   */
+  async function exportBackup() {
+    const t = await tx(STORE_NAMES);
+    const stores = {};
+    let recordCount = 0;
+    for (const name of STORE_NAMES) {
+      const rows = await storeGetAll(t.objectStore(name));
+      stores[name] = rows;
+      recordCount += rows.length;
+    }
+    return {
+      format: BACKUP_FORMAT,
+      version: BACKUP_VERSION,
+      exported_at: nowIso(),
+      db_name: DB_NAME,
+      db_version: DB_VERSION,
+      record_count: recordCount,
+      stores,
+    };
+  }
+
+  /** Validate a parsed backup object; throws with a plain-English message. */
+  function assertBackupShape(data) {
+    if (!data || typeof data !== "object") throw err("That file does not look like a Teachers B00k backup.");
+    if (data.format !== BACKUP_FORMAT) throw err("Wrong file type. Choose a Teachers B00k backup (.json).");
+    if (Number(data.version) !== BACKUP_VERSION) {
+      throw err(`This backup version (${data.version}) is not supported by this app yet.`);
+    }
+    if (!data.stores || typeof data.stores !== "object") throw err("Backup file is missing gradebook data.");
+    for (const name of STORE_NAMES) {
+      if (!(name in data.stores)) throw err(`Backup is incomplete (missing “${name}”).`);
+      if (!Array.isArray(data.stores[name])) throw err(`Backup store “${name}” is damaged.`);
+    }
+    return data;
+  }
+
+  /**
+   * Replace all device data with a backup. Uses put() so original IDs (and
+   * student↔assignment links) survive. Caller should reload the UI afterward.
+   *
+   * Important: queue clear + put requests before any await so the transaction
+   * does not auto-commit between steps.
+   */
+  async function importBackupReplace(raw) {
+    const data = assertBackupShape(raw);
+    const t = await tx(STORE_NAMES, "readwrite");
+    const ops = [];
+    let putCount = 0;
+
+    for (const name of STORE_NAMES) {
+      ops.push(reqToPromise(t.objectStore(name).clear()));
+    }
+    for (const name of STORE_NAMES) {
+      const store = t.objectStore(name);
+      for (const row of data.stores[name]) {
+        // Skip rows without an id — autoIncrement would break FK integrity.
+        if (row == null || row.id == null) continue;
+        ops.push(storePut(store, row));
+        putCount += 1;
+      }
+    }
+    await Promise.all([...ops, txDone(t)]);
+    return {
+      status: "restored",
+      exported_at: data.exported_at || null,
+      record_count: data.record_count || putCount,
+    };
+  }
+
   global.TB = {
     openDb,
     listAccounts,
@@ -774,5 +852,11 @@
     createBenchmark,
     updateBenchmark,
     deleteBenchmark,
+    exportBackup,
+    importBackupReplace,
+    assertBackupShape,
+    STORE_NAMES,
+    BACKUP_FORMAT,
+    BACKUP_VERSION,
   };
 })(typeof window !== "undefined" ? window : globalThis);

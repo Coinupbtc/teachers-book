@@ -35,6 +35,7 @@ python3 -m http.server 8080
 - Grades are stored in **this browser on this device** (IndexedDB). They are not uploaded to a server.
 - Clearing site/browser data **deletes** your gradebooks. Sign out does **not**.
 - There is no multi-device sync — use the same computer/browser to keep your grades.
+- **Backup before updates:** tap **Backup** (or **Backup & restore** on the sign-in screen) → **Download backup file**, then copy `Teachers-B00k-backup-*.json` to a flash drive. To undo a bad update or move to another Chrome profile, use **Choose backup file…** (this replaces data on that device).
 
 ## Features
 
@@ -42,6 +43,7 @@ python3 -m http.server 8080
 |---------|---------------|
 | Offline / installable PWA | ✅ |
 | Name-only local accounts | ✅ |
+| Full-device backup / restore (JSON → flash drive) | ✅ |
 | Classes + weighted categories | ✅ |
 | Gradebook grid (autosave, Enter → next row) | ✅ |
 | Batch add students | ✅ |
