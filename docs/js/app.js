@@ -108,7 +108,7 @@ async function loginScreen() {
     ? `<div class="account-list">${state.accounts.map((a) => `<button type="button" class="account-pick" data-account="${a.id}">${esc(a.name)}</button>`).join("")}</div>`
     : `<p class="account-empty">No accounts on this device yet — create one.</p>`;
 
-  app.innerHTML = `<main class="login-page"><section class="login-card"><div class="brand-mark">✓</div><p class="eyebrow">TEACHERS B00K</p><h1>Your calm, capable gradebook.</h1><p class="login-copy">Everything stays on this computer. Create an account with your name — no email or password.</p><div class="auth-tabs"><button class="auth-tab active" data-auth="signup">Create account</button><button class="auth-tab" data-auth="signin">Sign in</button></div><div id="auth-error" class="form-error" role="alert"></div><form id="signup-form"><label>Your name<input id="signup-name" class="field" autocomplete="name" placeholder="Ms. Rivera" required></label><button class="button primary wide">Create my gradebook</button></form><div id="signin-panel" hidden>${accountButtons}<p class="form-note" style="margin-top:16px">Tip: you can create another account anytime from the Create account tab.</p></div><div class="login-backup"><p class="form-note">Before an app update (or anytime), save a backup to Downloads or a flash drive.</p><button type="button" class="button secondary wide" id="open-backup">Backup &amp; restore</button></div></section></main>`;
+  app.innerHTML = `<main class="login-page"><section class="login-card"><div class="brand-mark">✓</div><p class="eyebrow">TEACHERS B00K</p><h1>Your calm, capable gradebook.</h1><p class="login-copy">Everything stays on this computer. Create an account with your name — no email or password.</p><div class="auth-tabs"><button class="auth-tab active" data-auth="signup">Create account</button><button class="auth-tab" data-auth="signin">Sign in</button></div><div id="auth-error" class="form-error" role="alert"></div><form id="signup-form"><label>Your name<input id="signup-name" class="field" autocomplete="name" placeholder="Ms. Rivera" required></label><button class="button primary wide">Create my gradebook</button></form><div id="signin-panel" hidden>${accountButtons}<p class="form-note" style="margin-top:16px">Tip: you can create another account anytime from the Create account tab.</p></div><div class="login-backup"><p class="form-note">Save grades to a file (or put them back) anytime — same buttons you’ll see after you sign in.</p><div class="backup-actions"><button type="button" class="button secondary" id="btn-backup-data">Back up data</button><button type="button" class="button secondary" id="btn-restore-data">Restore data from backup</button></div></div></section></main>`;
 
   document.querySelectorAll(".auth-tab").forEach((button) =>
     button.addEventListener("click", () => {
@@ -141,7 +141,7 @@ async function loginScreen() {
     })
   );
 
-  $("open-backup")?.addEventListener("click", () => backupModal());
+  bindBackupButtons();
 }
 
 function showAuthError(text) {
@@ -158,7 +158,8 @@ async function enterAccount(account) {
 
 function shell(content) {
   const dark = document.documentElement.dataset.theme === "dark";
-  return `<div class="app-shell"><header class="topbar"><button class="wordmark" data-page="classes"><span class="brand-mark small">✓</span><span>Teachers B00k</span></button><nav><button data-page="classes" class="nav-link ${state.view === "classes" ? "active" : ""}">My classes</button>${state.currentClass ? `<button data-page="gradebook" class="nav-link ${state.view === "gradebook" ? "active" : ""}">Gradebook</button><button data-page="rewards" class="nav-link ${state.view === "rewards" ? "active" : ""}">Student Rewards</button><button data-page="goals" class="nav-link ${state.view === "goals" ? "active" : ""}">Goal Tracker</button>` : ""}</nav><div class="account"><button class="theme-toggle" id="theme-toggle" aria-label="Switch to ${dark ? "light" : "dark"} mode" title="Switch to ${dark ? "light" : "dark"} mode">${dark ? "☀" : "☾"}</button><span>${esc(state.teacher?.name || "")}</span><button class="text-button" id="open-backup" type="button">Backup</button><button class="text-button" id="logout">Sign out</button></div></header><main class="content">${content}</main></div>`;
+  // Account cluster: name + explicit Back up / Restore (easy to find next to Sign out)
+  return `<div class="app-shell"><header class="topbar"><button class="wordmark" data-page="classes"><span class="brand-mark small">✓</span><span>Teachers B00k</span></button><nav><button data-page="classes" class="nav-link ${state.view === "classes" ? "active" : ""}">My classes</button>${state.currentClass ? `<button data-page="gradebook" class="nav-link ${state.view === "gradebook" ? "active" : ""}">Gradebook</button><button data-page="rewards" class="nav-link ${state.view === "rewards" ? "active" : ""}">Student Rewards</button><button data-page="goals" class="nav-link ${state.view === "goals" ? "active" : ""}">Goal Tracker</button>` : ""}</nav><div class="account"><button class="theme-toggle" id="theme-toggle" aria-label="Switch to ${dark ? "light" : "dark"} mode" title="Switch to ${dark ? "light" : "dark"} mode">${dark ? "☀" : "☾"}</button><span class="account-name">${esc(state.teacher?.name || "")}</span><div class="account-actions"><button type="button" class="button secondary account-action" id="btn-backup-data" title="Save all grades to a file you can keep on a flash drive">Back up data</button><button type="button" class="button secondary account-action" id="btn-restore-data" title="Replace this device’s grades with a backup file">Restore data</button><button type="button" class="text-button" id="logout">Sign out</button></div></div></header><main class="content">${content}</main></div>`;
 }
 
 function classDashboard() {
@@ -404,7 +405,7 @@ function bindShell() {
   );
   $("logout")?.addEventListener("click", signOut);
   $("theme-toggle")?.addEventListener("click", toggleTheme);
-  $("open-backup")?.addEventListener("click", () => backupModal());
+  bindBackupButtons();
 }
 
 function bindDashboard() {
@@ -750,7 +751,13 @@ async function exportCsv() {
   }
 }
 
-/** Download a full-device JSON backup (save to flash drive / cloud folder). */
+/** Wire the shared Back up / Restore controls (login + topbar). */
+function bindBackupButtons() {
+  $("btn-backup-data")?.addEventListener("click", () => runBackupDownload());
+  $("btn-restore-data")?.addEventListener("click", () => restoreModal());
+}
+
+/** One-click: download full-device JSON backup to Downloads (then copy to a flash drive). */
 async function downloadDeviceBackup() {
   const backup = await TB.exportBackup();
   const stamp = (backup.exported_at || new Date().toISOString()).slice(0, 10);
@@ -762,6 +769,15 @@ async function downloadDeviceBackup() {
   link.click();
   URL.revokeObjectURL(link.href);
   return backup;
+}
+
+async function runBackupDownload() {
+  try {
+    const backup = await downloadDeviceBackup();
+    toast(`Backed up ${backup.record_count} records — check Downloads, then copy to a flash drive.`);
+  } catch (err) {
+    toast(err.message, "error");
+  }
 }
 
 /** Read a File as UTF-8 text, parse JSON, restore (replace), then reload UI. */
@@ -790,32 +806,20 @@ async function restoreDeviceBackupFromFile(file) {
   return result;
 }
 
-function backupModal() {
+/** Restore is destructive — short modal with plain steps + file picker. */
+function restoreModal() {
   modal(
-    "Backup & restore",
+    "Restore data from backup",
     `<div class="backup-panel">
-      <p>Save a copy of <strong>all accounts, classes, and grades</strong> on this device. Keep the file on a flash drive or in Downloads before updating the app.</p>
-      <button type="button" class="button primary wide" id="backup-download">Download backup file</button>
-      <hr class="backup-rule">
-      <p><strong>Restore</strong> replaces everything currently in Teachers B00k on this computer with the backup file you choose.</p>
-      <label class="backup-file-label button secondary wide">Choose backup file…
+      <p>Choose a <strong>Teachers-B00k-backup-*.json</strong> file from your computer or flash drive.</p>
+      <p><strong>This replaces all grades on this device</strong> with what’s in that file. Sign out does not delete data — restore does overwrite it.</p>
+      <label class="backup-file-label button primary wide">Choose backup file…
         <input type="file" id="backup-file" accept="application/json,.json" hidden>
       </label>
       <p class="form-note" id="backup-status" role="status"></p>
     </div>`,
     (node) => {
       const status = () => node.querySelector("#backup-status");
-      node.querySelector("#backup-download").addEventListener("click", async () => {
-        try {
-          status().textContent = "Preparing backup…";
-          const backup = await downloadDeviceBackup();
-          status().textContent = `Saved Teachers-B00k-backup-*.json (${backup.record_count} records). Copy it to a flash drive if you like.`;
-          toast("Backup downloaded.");
-        } catch (err) {
-          status().textContent = err.message;
-          toast(err.message, "error");
-        }
-      });
       node.querySelector("#backup-file").addEventListener("change", async (e) => {
         const file = e.target.files && e.target.files[0];
         e.target.value = "";
@@ -828,8 +832,7 @@ function backupModal() {
           status().textContent = "Restoring…";
           const result = await restoreDeviceBackupFromFile(file);
           status().textContent = `Restored ${result.record_count} records. Sign in with your name.`;
-          toast("Backup restored.");
-          // Close modal and show login with restored accounts.
+          toast("Data restored from backup.");
           document.querySelector(".modal-overlay")?.remove();
           render();
         } catch (err) {

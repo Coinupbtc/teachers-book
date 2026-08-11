@@ -97,6 +97,7 @@ html[data-theme="dark"] .account-pick:hover { background:#1d3028; border-color:#
 
 /* Backup & restore (login + modal) — touch-friendly, one column */
 .login-backup { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line); display: grid; gap: 12px; }
+.backup-actions { display: grid; gap: 10px; }
 .backup-panel { display: grid; gap: 14px; }
 .backup-panel p { color: var(--muted); font-size: .95rem; }
 .backup-panel strong { color: var(--ink); }
@@ -104,6 +105,16 @@ html[data-theme="dark"] .account-pick:hover { background:#1d3028; border-color:#
 .backup-file-label { display: grid; place-items: center; min-height: 48px; text-align: center; cursor: pointer; }
 .backup-file-label input { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
 #backup-status { min-height: 1.2em; }
+/* Topbar account cluster: name + Back up data / Restore data next to Sign out */
+.account { display: flex; align-items: center; gap: 10px; margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }
+.account-name { font-weight: 600; color: var(--ink); }
+.account-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.account-action { min-height: 44px; padding: 8px 12px; font-size: .9rem; white-space: nowrap; }
+@media (max-width: 900px) {
+  .account-actions { width: 100%; }
+  .account-action { flex: 1 1 auto; }
+}
 @media (max-width: 430px) {
   .account .text-button { min-height: 44px; min-width: 44px; padding: 8px 10px; }
+  .backup-actions .button { min-height: 48px; width: 100%; }
 }
