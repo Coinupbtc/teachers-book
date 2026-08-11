@@ -43,4 +43,17 @@ gradebook.db
 !.env.example
 node_modules/
 *.pyc
+
+# Friend share instance (local-only; never commit)
+gradebook-friend.db
+.teachers-book-friend.env
+friend-tunnel-url.txt
+friend-tunnel.log
+.teachers-book-friend.env.placeholder
+
+# Local UX / dogfood artifacts (never commit)
 dogfood-output/
+FEEL_PASS.md
+_write_icons_out.txt
+backend/.teachers-book.env.bak-*
+docs/screenshots/*.placeholder-bak.png
