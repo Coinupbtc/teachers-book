@@ -166,7 +166,18 @@ function classDashboard() {
   const cards = state.classes
     .map(
       (cls) =>
-        `<button class="class-card" data-class="${cls.id}"><div class="class-card-top"><span class="class-icon">▦</span><span class="open-arrow">→</span></div><h2>${esc(cls.name)}</h2><p>${esc(cls.subject || "No subject yet")}</p><div class="class-meta"><span>${cls.student_count} students</span><span>${cls.assignment_count} assignments</span></div></button>`
+        `<article class="class-card">
+          <button type="button" class="class-card-open" data-class="${cls.id}">
+            <div class="class-card-top"><span class="class-icon">▦</span><span class="open-arrow">→</span></div>
+            <h2>${esc(cls.name)}</h2>
+            <p>${esc(cls.subject || "No subject yet")}</p>
+            <div class="class-meta"><span>${cls.student_count} students</span><span>${cls.assignment_count} assignments</span></div>
+          </button>
+          <div class="class-card-actions">
+            <button type="button" class="button secondary" data-class-edit="${cls.id}">Edit</button>
+            <button type="button" class="button danger-outline" data-class-delete="${cls.id}">Delete</button>
+          </div>
+        </article>`
     )
     .join("");
   return shell(
@@ -416,20 +427,58 @@ function bindDashboard() {
       render();
     })
   );
-  $("new-class")?.addEventListener("click", newClassModal);
-  $("new-class-empty")?.addEventListener("click", newClassModal);
+  document.querySelectorAll("[data-class-edit]").forEach((button) =>
+    button.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const cls = state.classes.find((c) => String(c.id) === String(button.dataset.classEdit));
+      classModal(cls);
+    })
+  );
+  document.querySelectorAll("[data-class-delete]").forEach((button) =>
+    button.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const cls = state.classes.find((c) => String(c.id) === String(button.dataset.classDelete));
+      if (!cls) return;
+      if (!confirm(`Delete “${cls.name}” and all of its students, assignments, and scores? This cannot be undone.`)) return;
+      try {
+        await TB.deleteClass(cls.id, state.accountId);
+        if (state.currentClass && String(state.currentClass.id) === String(cls.id)) {
+          state.currentClass = null;
+          state.gradebook = null;
+          state.view = "classes";
+        }
+        await loadClasses();
+        render();
+        toast("Class deleted.");
+      } catch (err) {
+        toast(err.message, "error");
+      }
+    })
+  );
+  $("new-class")?.addEventListener("click", () => classModal());
+  $("new-class-empty")?.addEventListener("click", () => classModal());
 }
 
 function bindGradebook() {
-  $("new-assignment")?.addEventListener("click", assignmentModal);
-  $("new-assignment-empty")?.addEventListener("click", assignmentModal);
+  $("new-assignment")?.addEventListener("click", () => assignmentModal());
+  $("new-assignment-empty")?.addEventListener("click", () => assignmentModal());
   $("add-students")?.addEventListener("click", studentsModal);
   $("export")?.addEventListener("click", exportCsv);
   $("view-insights")?.addEventListener("click", insightsModal);
   $("student-search")?.addEventListener("input", (e) => {
-    state.search = e.target.value;
+    const el = e.target;
+    state.search = el.value;
+    const pos = el.selectionStart;
     render();
-    $("student-search")?.focus();
+    const next = $("student-search");
+    if (next) {
+      next.focus();
+      try {
+        next.setSelectionRange(pos, pos);
+      } catch {
+        /* number inputs don't support setSelectionRange */
+      }
+    }
   });
   $("assignment-filter")?.addEventListener("change", (e) => {
     state.assignmentFilter = e.target.value;
@@ -525,24 +574,27 @@ function focusNextRow(input) {
   }
 }
 
-function newClassModal() {
+function classModal(cls = null) {
+  const editing = Boolean(cls && cls.id);
   modal(
-    "Add a class",
-    `<form id="class-form"><div class="form-grid"><label>Class name<input class="field" id="class-name" placeholder="e.g. Algebra I" required autofocus></label><label>Subject<input class="field" id="class-subject" placeholder="e.g. Mathematics"></label></div><label>Grade level <input class="field" id="class-level" placeholder="e.g. 9th grade"></label><p class="form-note">We’ll set up useful categories for you: Tests, Quizzes, Homework, Classwork, and Participation.</p><div class="modal-actions"><button type="button" class="button secondary modal-cancel">Cancel</button><button class="button primary">Create class</button></div></form>`,
+    editing ? "Edit class" : "Add a class",
+    `<form id="class-form"><div class="form-grid"><label>Class name<input class="field" id="class-name" placeholder="e.g. Algebra I" value="${esc(cls?.name || "")}" required autofocus></label><label>Subject<input class="field" id="class-subject" placeholder="e.g. Mathematics" value="${esc(cls?.subject || "")}"></label></div><label>Grade level <input class="field" id="class-level" placeholder="e.g. 9th grade" value="${esc(cls?.grade_level || "")}"></label>${editing ? "" : `<p class="form-note">We’ll set up useful categories for you: Tests, Quizzes, Homework, Classwork, and Participation.</p>`}<div class="modal-actions"><button type="button" class="button secondary modal-cancel">Cancel</button><button class="button primary">${editing ? "Save changes" : "Create class"}</button></div></form>`,
     (node, close) => {
       node.querySelector(".modal-cancel").onclick = close;
       node.querySelector("#class-form").onsubmit = async (e) => {
         e.preventDefault();
+        const payload = {
+          name: $("class-name").value.trim(),
+          subject: $("class-subject").value.trim(),
+          grade_level: $("class-level").value.trim(),
+        };
         try {
-          await TB.createClass(state.accountId, {
-            name: $("class-name").value.trim(),
-            subject: $("class-subject").value.trim(),
-            grade_level: $("class-level").value.trim(),
-          });
+          if (editing) await TB.updateClass(cls.id, state.accountId, payload);
+          else await TB.createClass(state.accountId, payload);
           await loadClasses();
           close();
           render();
-          toast("Class created. Your gradebook is ready.");
+          toast(editing ? "Class updated." : "Class created. Your gradebook is ready.");
         } catch (err) {
           toast(err.message, "error");
         }

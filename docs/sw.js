@@ -1,5 +1,5 @@
 /* Teachers B00k service worker — offline cache for GitHub Pages / local static host */
-const CACHE = "teachers-b00k-v3";
+const CACHE = "teachers-b00k-v4";
 const PRECACHE = [
   "./",
   "./index.html",
@@ -7,6 +7,7 @@ const PRECACHE = [
   "./js/db.js",
   "./js/grades.js",
   "./js/app.js",
+  "./js/install.js",
   "./manifest.webmanifest",
   "./icons/icon.svg",
   "./icons/icon-192.png",

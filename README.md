@@ -15,7 +15,13 @@ Open in Chrome, install the app, create an account with your name. Grades stay o
 ## Try it
 
 ### One click
-Open **[https://coinupbtc.com/teachers-book/](https://coinupbtc.com/teachers-book/)** in Chrome → **Install** → **Create account** with your name (e.g. Ms. Rivera).
+Open **[https://coinupbtc.com/teachers-book/](https://coinupbtc.com/teachers-book/)** in **Google Chrome**.
+
+1. Tap **Install Teachers B00k** on the green bar (or **How to install in Chrome** if the bar has no Install button).
+2. Chrome menu **⋮** → **Cast, save, and share** → **Install page as app…** also works.
+3. **Create account** with your name (e.g. Ms. Rivera).
+
+A tab in Chrome is not the installed app. After install it should open from the shelf / Start menu without the address bar.
 
 ### One command
 ```bash

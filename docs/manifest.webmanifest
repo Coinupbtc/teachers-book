@@ -1,19 +1,16 @@
 {
+  "id": "https://coinupbtc.com/teachers-book/",
   "name": "Teachers B00k",
   "short_name": "Teachers B00k",
   "description": "Offline teacher gradebook — grades stay on this device.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
+  "orientation": "any",
   "background_color": "#f7f8f4",
   "theme_color": "#176b55",
+  "prefer_related_applications": false,
   "icons": [
-    {
-      "src": "icons/icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any"
-    },
     {
       "src": "icons/icon-192.png",
       "sizes": "192x192",
@@ -24,7 +21,13 @@
       "src": "icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }

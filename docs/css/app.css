@@ -118,3 +118,20 @@ html[data-theme="dark"] .account-pick:hover { background:#1d3028; border-color:#
   .account .text-button { min-height: 44px; min-width: 44px; padding: 8px 10px; }
   .backup-actions .button { min-height: 48px; width: 100%; }
 }
+
+.class-card { display:flex; flex-direction:column; gap:10px; padding:16px; border:1px solid var(--line); border-radius:16px; background:var(--paper); }
+.class-card-open { border:0; background:none; text-align:left; padding:0; color:inherit; width:100%; min-height:44px; }
+.class-card-actions { display:flex; gap:8px; flex-wrap:wrap; }
+.class-card-actions .button { min-height:44px; flex:1 1 auto; }
+
+.pwa-install-bar { display:flex; gap:16px; align-items:center; justify-content:space-between; flex-wrap:wrap; padding:14px max(24px, calc((100vw - 1280px)/2)); background:#143f34; color:#f7f8f4; }
+.pwa-install-bar p { margin:4px 0 0; color:#d5e6df; font-size:.92rem; }
+.pwa-install-actions { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+.pwa-install-bar .text-button { color:#d5e6df; min-height:44px; }
+.install-steps { margin:0; padding-left:1.2em; display:grid; gap:8px; color:var(--ink); }
+.install-steps li { line-height:1.4; }
+@media (max-width: 480px) {
+  .pwa-install-bar { padding:14px 16px; }
+  .pwa-install-actions { width:100%; }
+  .pwa-install-actions .button { width:100%; min-height:48px; }
+}

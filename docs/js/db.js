@@ -88,8 +88,16 @@
     return reqToPromise(store.getAll());
   }
 
+  /** IndexedDB throws a cryptic error on null/NaN keys — never pass those through. */
+  function validId(id) {
+    const n = Number(id);
+    return Number.isInteger(n) && n > 0 ? n : null;
+  }
+
   function storeGet(store, id) {
-    return reqToPromise(store.get(id));
+    const key = validId(id);
+    if (key == null) return Promise.resolve(undefined);
+    return reqToPromise(store.get(key));
   }
 
   function storePut(store, value) {
@@ -101,11 +109,15 @@
   }
 
   function storeDelete(store, id) {
-    return reqToPromise(store.delete(id));
+    const key = validId(id);
+    if (key == null) return Promise.resolve();
+    return reqToPromise(store.delete(key));
   }
 
   function indexGetAll(index, key) {
-    return reqToPromise(index.getAll(key));
+    const k = validId(key);
+    if (k == null) return Promise.resolve([]);
+    return reqToPromise(index.getAll(k));
   }
 
   function nowIso() {
@@ -161,6 +173,7 @@
         id: c.id,
         name: c.name,
         subject: c.subject || "",
+        grade_level: c.grade_level || "",
         semester: c.semester || "",
         student_count: students.filter((s) => s.class_id === c.id).length,
         assignment_count: assignments.filter((a) => a.class_id === c.id).length,
@@ -195,6 +208,50 @@
     );
     await Promise.all([...catWrites, txDone(tCats)]);
     return { id: classId, name: cls.name };
+  }
+
+  async function updateClass(classId, accountId, payload) {
+    const cls = await assertClassOwner(classId, accountId);
+    cls.name = String(payload.name || "").trim();
+    cls.subject = String(payload.subject || "").trim();
+    cls.grade_level = String(payload.grade_level || "").trim();
+    if (!cls.name) throw err("Enter a class name.");
+    const tWrite = await tx(["classes"], "readwrite");
+    await Promise.all([storePut(tWrite.objectStore("classes"), cls), txDone(tWrite)]);
+    return { id: cls.id, name: cls.name, status: "updated" };
+  }
+
+  async function deleteClass(classId, accountId) {
+    const cls = await assertClassOwner(classId, accountId);
+    const tRead = await tx(["categories", "students", "assignments", "grades", "rewards", "goals", "benchmarks"]);
+    const cats = await indexGetAll(tRead.objectStore("categories").index("class_id"), cls.id);
+    const students = await indexGetAll(tRead.objectStore("students").index("class_id"), cls.id);
+    const assignments = await indexGetAll(tRead.objectStore("assignments").index("class_id"), cls.id);
+    const studentIds = new Set(students.map((s) => s.id));
+    const assignmentIds = new Set(assignments.map((a) => a.id));
+    const grades = (await storeGetAll(tRead.objectStore("grades"))).filter(
+      (g) => studentIds.has(g.student_id) || assignmentIds.has(g.assignment_id)
+    );
+    const rewards = (await storeGetAll(tRead.objectStore("rewards"))).filter((r) => r.class_id === cls.id);
+    const goals = (await storeGetAll(tRead.objectStore("goals"))).filter((g) => g.class_id === cls.id);
+    const goalIds = new Set(goals.map((g) => g.id));
+    const benches = (await storeGetAll(tRead.objectStore("benchmarks"))).filter((b) => goalIds.has(b.goal_id));
+
+    const tWrite = await tx(
+      ["classes", "categories", "students", "assignments", "grades", "rewards", "goals", "benchmarks"],
+      "readwrite"
+    );
+    const deletes = [];
+    for (const row of benches) deletes.push(storeDelete(tWrite.objectStore("benchmarks"), row.id));
+    for (const row of goals) deletes.push(storeDelete(tWrite.objectStore("goals"), row.id));
+    for (const row of rewards) deletes.push(storeDelete(tWrite.objectStore("rewards"), row.id));
+    for (const row of grades) deletes.push(storeDelete(tWrite.objectStore("grades"), row.id));
+    for (const row of assignments) deletes.push(storeDelete(tWrite.objectStore("assignments"), row.id));
+    for (const row of students) deletes.push(storeDelete(tWrite.objectStore("students"), row.id));
+    for (const row of cats) deletes.push(storeDelete(tWrite.objectStore("categories"), row.id));
+    deletes.push(storeDelete(tWrite.objectStore("classes"), cls.id));
+    await Promise.all([...deletes, txDone(tWrite)]);
+    return { status: "deleted" };
   }
 
   async function assertClassOwner(classId, accountId) {
@@ -831,6 +888,8 @@
     getAccount,
     listClasses,
     createClass,
+    updateClass,
+    deleteClass,
     listCategories,
     addStudentsBatch,
     updateStudent,
