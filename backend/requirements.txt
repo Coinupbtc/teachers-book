@@ -1,7 +1,7 @@
 fastapi>=0.104.0
 uvicorn[standard]>=0.54.0
 sqlalchemy>=2.0.0
-pydantic>=2.0.0
+pydantic>=2.14.1
 python-jose[cryptography]>=3.3.0
 passlib[bcrypt]>=1.7.4
 # passlib 1.7.4 breaks on bcrypt>=4.1 (reads bcrypt.__about__, then hashes a >72-byte probe)
